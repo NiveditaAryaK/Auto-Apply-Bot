@@ -129,6 +129,17 @@ def _get_application_sync(dedup_key: str) -> dict | None:
 		conn.close()
 
 
+def _get_recent_applied_urls_sync(since_iso: str) -> list[str]:
+	conn = _connect()
+	try:
+		rows = conn.execute(
+			"SELECT url FROM applications WHERE status = 'applied' AND applied_at >= ?", (since_iso,)
+		).fetchall()
+		return [row[0] for row in rows]
+	finally:
+		conn.close()
+
+
 def _get_cached_answer_sync(ats_platform: str, normalized_label: str) -> tuple[str, str] | None:
 	conn = _connect()
 	try:
@@ -163,6 +174,12 @@ async def is_seen(dedup_key: str) -> bool:
 async def get_application(dedup_key: str) -> dict | None:
 	"""Most recent applications row for this posting, or None if it's never been recorded."""
 	return await asyncio.to_thread(_get_application_sync, dedup_key)
+
+
+async def get_recent_applied_urls(since_iso: str) -> list[str]:
+	"""URLs of every application successfully submitted (status='applied') at or after
+	since_iso -- used to enforce config.RATE_LIMITS per domain."""
+	return await asyncio.to_thread(_get_recent_applied_urls_sync, since_iso)
 
 
 async def mark_seen(dedup_key: str, company: str, title: str, url: str, ats_platform: str) -> None:

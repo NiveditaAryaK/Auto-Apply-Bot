@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 from job_agent import db, pipeline
+from job_agent.apply_agent import ApplicationOutcome
 from job_agent.discovery.base import JobPosting
 from job_agent.hr_agent import RoleScreeningResult, ScreeningResult
 from job_agent.resume.profile import ResumeProfile
@@ -50,8 +51,9 @@ async def test_screen_new_postings_records_a_passing_screening(monkeypatch):
 	)
 	_patch_pipeline(monkeypatch, role_profiles, [posting], screening_result)
 
-	results = await pipeline.screen_new_postings(llm=SimpleNamespace())
+	returned_role_profiles, results = await pipeline.screen_new_postings(llm=SimpleNamespace())
 
+	assert returned_role_profiles == role_profiles
 	assert results == [(posting, screening_result)]
 	application = await db.get_application(posting.dedup_key)
 	assert application is not None
@@ -83,6 +85,61 @@ async def test_screen_new_postings_returns_empty_list_when_no_new_postings(monke
 	role_profiles = _fixture_role_profiles()
 	_patch_pipeline(monkeypatch, role_profiles, [], screening_result=None)
 
-	results = await pipeline.screen_new_postings(llm=SimpleNamespace())
+	_, results = await pipeline.screen_new_postings(llm=SimpleNamespace())
 
 	assert results == []
+
+
+async def test_apply_to_passing_postings_skips_rejected_and_applies_to_passing(monkeypatch):
+	role_profiles = _fixture_role_profiles()
+	passing_posting = _fixture_posting()
+	rejected_posting = passing_posting.model_copy(update={'url': 'https://boards.greenhouse.io/acme/jobs/2'})
+
+	passing_result = RoleScreeningResult(
+		role='Backend Engineer', used_fallback=False, screening=ScreeningResult(match_score=90, reasoning='n/a', missing_keywords=[])
+	)
+	rejected_result = RoleScreeningResult(
+		role='Backend Engineer', used_fallback=False, screening=ScreeningResult(match_score=40, reasoning='n/a', missing_keywords=[])
+	)
+
+	applied_to = []
+
+	async def fake_apply_to_posting(posting, role_profile, llm):
+		applied_to.append(posting)
+		return ApplicationOutcome(submitted=True, questions_encountered=[])
+
+	monkeypatch.setattr(pipeline, 'apply_to_posting', fake_apply_to_posting)
+
+	outcomes = await pipeline.apply_to_passing_postings(
+		role_profiles,
+		[(passing_posting, passing_result), (rejected_posting, rejected_result)],
+		llm=SimpleNamespace(),
+	)
+
+	assert applied_to == [passing_posting]
+	assert len(outcomes) == 1
+	assert outcomes[0].submitted is True
+
+
+async def test_run_chains_screening_into_applying(monkeypatch):
+	role_profiles = _fixture_role_profiles()
+	posting = _fixture_posting()
+	screening_result = RoleScreeningResult(
+		role='Backend Engineer', used_fallback=False, screening=ScreeningResult(match_score=90, reasoning='n/a', missing_keywords=[])
+	)
+
+	async def fake_screen_new_postings(llm):
+		return role_profiles, [(posting, screening_result)]
+
+	async def fake_apply_to_passing_postings(profiles, screened, llm):
+		assert profiles == role_profiles
+		assert screened == [(posting, screening_result)]
+		return [ApplicationOutcome(submitted=True, questions_encountered=[])]
+
+	monkeypatch.setattr(pipeline, 'screen_new_postings', fake_screen_new_postings)
+	monkeypatch.setattr(pipeline, 'apply_to_passing_postings', fake_apply_to_passing_postings)
+
+	outcomes = await pipeline.run(llm=SimpleNamespace())
+
+	assert len(outcomes) == 1
+	assert outcomes[0].submitted is True

@@ -14,6 +14,10 @@ LLM_MODEL = 'openai/gpt-oss-20b'
 
 MATCH_SCORE_THRESHOLD = 80
 
+# Upper bound on browser-use Agent steps for a single apply run -- a form-fill task should
+# never need anywhere near the library default of 500.
+APPLY_MAX_STEPS = 40
+
 
 @dataclass
 class RoleResume:
