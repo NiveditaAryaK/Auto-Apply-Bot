@@ -4,7 +4,6 @@ from pathlib import Path
 JOB_AGENT_DIR = Path(__file__).resolve().parent
 DATA_DIR = JOB_AGENT_DIR / 'data'
 DB_PATH = DATA_DIR / 'job_agent.sqlite3'
-RESUME_SOURCE_PATH = DATA_DIR / 'resume_source.pdf'
 RESUME_OUTPUT_DIR = DATA_DIR / 'resumes'
 
 # LM Studio local server (OpenAI-compatible endpoint), model id must match what LM Studio reports
@@ -14,6 +13,25 @@ LLM_API_KEY = 'lm-studio'
 LLM_MODEL = 'openai/gpt-oss-20b'
 
 MATCH_SCORE_THRESHOLD = 80
+
+
+@dataclass
+class RoleResume:
+	"""One of the candidate's resumes. Which role/specialization it targets is inferred from the
+	resume's own content (see resume/roles.py) rather than configured here -- only the file and
+	primary flag are user-provided. Discovery still runs a single broad search across all roles
+	(see KEYWORDS below); hr_agent.route_and_screen uses the inferred roles to pick which resume
+	best fits each posting found, falling back to the primary resume when none are a clear fit."""
+
+	resume_path: Path
+	is_primary: bool = False
+
+
+# Exactly one entry must have is_primary=True -- resume/roles.py validates this at load time.
+# Example:
+#   RoleResume(resume_path=DATA_DIR / 'resume_backend.pdf', is_primary=True),
+#   RoleResume(resume_path=DATA_DIR / 'resume_applied_ai.pdf'),
+ROLE_RESUMES: list[RoleResume] = []
 
 
 @dataclass

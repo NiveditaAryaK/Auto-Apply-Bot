@@ -5,6 +5,7 @@ from browser_use.llm.messages import SystemMessage, UserMessage
 from job_agent import config
 from job_agent.discovery.base import JobPosting
 from job_agent.resume.profile import ResumeProfile
+from job_agent.resume.roles import RoleProfile, primary_role_profile
 
 
 class ScreeningResult(BaseModel):
@@ -50,3 +51,60 @@ async def screen_job(profile: ResumeProfile, posting: JobPosting, llm: BaseChatM
 		reasoning=screening.reasoning,
 		missing_keywords=screening.missing_keywords,
 	)
+
+
+class RoleMatch(BaseModel):
+	model_config = ConfigDict(extra='forbid')
+
+	role: str | None  # None if no inferred role is a clear fit -- caller falls back to primary
+	reasoning: str
+
+
+class RoleScreeningResult(BaseModel):
+	model_config = ConfigDict(extra='forbid')
+
+	role: str
+	used_fallback: bool
+	screening: ScreeningResult
+
+
+async def _select_role(role_profiles: list[RoleProfile], posting: JobPosting, llm: BaseChatModel) -> RoleMatch:
+	role_summaries = {rp.role: rp.profile.summary for rp in role_profiles}
+	messages = [
+		SystemMessage(
+			content=(
+				'The candidate has multiple resumes, each written for a different role/specialization '
+				'(the role labels below were inferred from each resume, not chosen from a fixed list). '
+				'Given a job posting, pick which role its resume is the best fit for. If none of the '
+				'available roles are a clear fit, return null for role rather than guessing.'
+			)
+		),
+		UserMessage(
+			content=(
+				f'Job title: {posting.title}\nJob description:\n{posting.jd_text}\n\n'
+				f'Available roles and their resume summaries:\n{role_summaries}'
+			)
+		),
+	]
+	result = await llm.ainvoke(messages, output_format=RoleMatch)
+	return result.completion
+
+
+async def route_and_screen(role_profiles: list[RoleProfile], posting: JobPosting, llm: BaseChatModel) -> RoleScreeningResult:
+	"""Pick which of the candidate's role-tagged resumes best fits this posting, then screen that
+	resume against the JD. Discovery runs a single broad search across all roles (see
+	config.KEYWORDS), so this is what actually maps a posting found by that search to the right
+	resume. Falls back to the primary resume (config.RoleResume.is_primary) when the LLM can't
+	confidently place the posting under any configured role, rather than dropping it."""
+	if len(role_profiles) == 1:
+		chosen_role_profile = role_profiles[0]
+		used_fallback = False
+	else:
+		profile_by_role = {rp.role: rp for rp in role_profiles}
+		match = await _select_role(role_profiles, posting, llm)
+		chosen_role_profile = profile_by_role.get(match.role) if match.role else None
+		used_fallback = chosen_role_profile is None
+		chosen_role_profile = chosen_role_profile or primary_role_profile(role_profiles)
+
+	screening = await screen_job(chosen_role_profile.profile, posting, llm)
+	return RoleScreeningResult(role=chosen_role_profile.role, used_fallback=used_fallback, screening=screening)
