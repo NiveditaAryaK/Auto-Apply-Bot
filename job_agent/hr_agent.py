@@ -13,7 +13,6 @@ class ScreeningResult(BaseModel):
 
 	match_score: int  # 0-100
 	reasoning: str
-	missing_keywords: list[str]
 
 	@property
 	def passes_screening(self) -> bool:
@@ -31,9 +30,8 @@ async def screen_job(profile: ResumeProfile, posting: JobPosting, llm: BaseChatM
 				'You are an ATS/HR screener. Score how well the candidate resume matches the job '
 				'description on a 0-100 scale, the way an applicant tracking system and a first-pass '
 				'human recruiter would: keyword/skill overlap, years of experience against any stated '
-				'requirement, and seniority/title fit. List any requirement keywords from the JD that '
-				'the resume shows no evidence of meeting. Be a harsh, realistic grader -- most '
-				'applicants do not score above 80.'
+				'requirement, and seniority/title fit. Be a harsh, realistic grader -- most applicants '
+				'do not score above 80.'
 			)
 		),
 		UserMessage(
@@ -46,11 +44,7 @@ async def screen_job(profile: ResumeProfile, posting: JobPosting, llm: BaseChatM
 	]
 	result = await llm.ainvoke(messages, output_format=ScreeningResult)
 	screening = result.completion
-	return ScreeningResult(
-		match_score=max(0, min(100, screening.match_score)),
-		reasoning=screening.reasoning,
-		missing_keywords=screening.missing_keywords,
-	)
+	return ScreeningResult(match_score=max(0, min(100, screening.match_score)), reasoning=screening.reasoning)
 
 
 class RoleMatch(BaseModel):

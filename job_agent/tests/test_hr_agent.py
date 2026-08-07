@@ -49,18 +49,17 @@ class _FakeLLM:
 
 
 async def test_screen_job_returns_llm_score_and_reasoning():
-	fake_llm = _FakeLLM(ScreeningResult(match_score=72, reasoning='Solid overlap.', missing_keywords=['Kubernetes']))
+	fake_llm = _FakeLLM(ScreeningResult(match_score=72, reasoning='Solid overlap.'))
 
 	result = await screen_job(_fixture_profile(), _fixture_posting(), llm=fake_llm)
 
 	assert result.match_score == 72
 	assert result.reasoning == 'Solid overlap.'
-	assert result.missing_keywords == ['Kubernetes']
 
 
 @pytest.mark.parametrize(('raw_score', 'clamped_score'), [(150, 100), (-10, 0)])
 async def test_screen_job_clamps_out_of_range_score(raw_score, clamped_score):
-	fake_llm = _FakeLLM(ScreeningResult(match_score=raw_score, reasoning='n/a', missing_keywords=[]))
+	fake_llm = _FakeLLM(ScreeningResult(match_score=raw_score, reasoning='n/a'))
 
 	result = await screen_job(_fixture_profile(), _fixture_posting(), llm=fake_llm)
 
@@ -70,8 +69,8 @@ async def test_screen_job_clamps_out_of_range_score(raw_score, clamped_score):
 def test_passes_screening_uses_configured_threshold(monkeypatch):
 	monkeypatch.setattr(config, 'MATCH_SCORE_THRESHOLD', 80)
 
-	assert ScreeningResult(match_score=80, reasoning='n/a', missing_keywords=[]).passes_screening is True
-	assert ScreeningResult(match_score=79, reasoning='n/a', missing_keywords=[]).passes_screening is False
+	assert ScreeningResult(match_score=80, reasoning='n/a').passes_screening is True
+	assert ScreeningResult(match_score=79, reasoning='n/a').passes_screening is False
 
 
 class _CountingScreeningLLM:
@@ -99,7 +98,7 @@ class _RoutingFakeLLM:
 
 async def test_route_and_screen_skips_routing_call_for_a_single_resume():
 	role_profiles = _fixture_role_profiles()[:1]
-	fake_llm = _CountingScreeningLLM(ScreeningResult(match_score=90, reasoning='n/a', missing_keywords=[]))
+	fake_llm = _CountingScreeningLLM(ScreeningResult(match_score=90, reasoning='n/a'))
 
 	result = await route_and_screen(role_profiles, _fixture_posting(), llm=fake_llm)
 
@@ -112,7 +111,7 @@ async def test_route_and_screen_uses_llm_selected_role():
 	role_profiles = _fixture_role_profiles()
 	fake_llm = _RoutingFakeLLM(
 		role_match=RoleMatch(role='Applied AI Engineer', reasoning='LLM-heavy posting.'),
-		screening=ScreeningResult(match_score=85, reasoning='n/a', missing_keywords=[]),
+		screening=ScreeningResult(match_score=85, reasoning='n/a'),
 	)
 
 	result = await route_and_screen(role_profiles, _fixture_posting(), llm=fake_llm)
@@ -125,7 +124,7 @@ async def test_route_and_screen_falls_back_to_primary_when_llm_finds_no_clear_fi
 	role_profiles = _fixture_role_profiles()
 	fake_llm = _RoutingFakeLLM(
 		role_match=RoleMatch(role=None, reasoning='Neither resume is a clear fit.'),
-		screening=ScreeningResult(match_score=40, reasoning='n/a', missing_keywords=[]),
+		screening=ScreeningResult(match_score=40, reasoning='n/a'),
 	)
 
 	result = await route_and_screen(role_profiles, _fixture_posting(), llm=fake_llm)
@@ -139,7 +138,7 @@ async def test_route_and_screen_falls_back_to_primary_when_llm_hallucinates_a_ro
 	role_profiles = _fixture_role_profiles()
 	fake_llm = _RoutingFakeLLM(
 		role_match=RoleMatch(role='role-that-does-not-exist', reasoning='n/a'),
-		screening=ScreeningResult(match_score=40, reasoning='n/a', missing_keywords=[]),
+		screening=ScreeningResult(match_score=40, reasoning='n/a'),
 	)
 
 	result = await route_and_screen(role_profiles, _fixture_posting(), llm=fake_llm)

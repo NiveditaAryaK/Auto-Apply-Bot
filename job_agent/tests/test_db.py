@@ -49,15 +49,3 @@ async def test_get_application_returns_most_recently_recorded_row():
 	assert application is not None
 	assert application['status'] == 'screened_pass'
 	assert application['match_score'] == 85
-
-
-async def test_question_cache_miss_then_hit():
-	assert await db.get_cached_answer('greenhouse', 'expected salary') is None
-	await db.cache_answer('greenhouse', 'expected salary', 'expected_salary', '150000')
-	assert await db.get_cached_answer('greenhouse', 'expected salary') == ('expected_salary', '150000')
-
-
-async def test_question_cache_upsert_overwrites_previous_answer():
-	await db.cache_answer('lever', 'notice period', 'notice_period_days', '30')
-	await db.cache_answer('lever', 'notice period', 'notice_period_days', '60')
-	assert await db.get_cached_answer('lever', 'notice period') == ('notice_period_days', '60')

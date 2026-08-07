@@ -1,4 +1,3 @@
-from datetime import datetime
 from typing import Protocol
 
 from pydantic import BaseModel, ConfigDict
@@ -13,7 +12,6 @@ class JobPosting(BaseModel):
 	url: str
 	ats_platform: str
 	jd_text: str
-	posted_at: datetime | None = None
 
 	@property
 	def dedup_key(self) -> str:

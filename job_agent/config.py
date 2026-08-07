@@ -56,10 +56,11 @@ TARGET_COMPANIES: list[TargetCompany] = []
 # Case-insensitive substrings matched against title + jd_text.
 KEYWORDS: list[str] = []
 
-# Per-domain rate limits for the apply step (not discovery). 'default' applies to any domain
-# not listed explicitly. Adversarial ATS/job-board domains (LinkedIn, Indeed) get a tight cap.
-RATE_LIMITS: dict[str, dict[str, int]] = {
-	'default': {'max_per_hour': 20, 'jitter_seconds': 60},
-	'linkedin.com': {'max_per_hour': 4, 'jitter_seconds': 300},
-	'indeed.com': {'max_per_hour': 4, 'jitter_seconds': 300},
+# Per-domain apply cap (max applications submitted per rolling hour), not discovery. 'default'
+# applies to any domain not listed explicitly. Adversarial ATS/job-board domains (LinkedIn,
+# Indeed) get a tight cap.
+RATE_LIMITS: dict[str, int] = {
+	'default': 20,
+	'linkedin.com': 4,
+	'indeed.com': 4,
 }

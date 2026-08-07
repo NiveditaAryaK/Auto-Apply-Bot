@@ -47,7 +47,7 @@ async def test_screen_new_postings_records_a_passing_screening(monkeypatch):
 	screening_result = RoleScreeningResult(
 		role='Backend Engineer',
 		used_fallback=False,
-		screening=ScreeningResult(match_score=90, reasoning='Great fit.', missing_keywords=[]),
+		screening=ScreeningResult(match_score=90, reasoning='Great fit.'),
 	)
 	_patch_pipeline(monkeypatch, role_profiles, [posting], screening_result)
 
@@ -69,7 +69,7 @@ async def test_screen_new_postings_records_a_failing_screening_as_rejected(monke
 	screening_result = RoleScreeningResult(
 		role='Backend Engineer',
 		used_fallback=True,
-		screening=ScreeningResult(match_score=40, reasoning='Weak fit.', missing_keywords=['Kubernetes']),
+		screening=ScreeningResult(match_score=40, reasoning='Weak fit.'),
 	)
 	_patch_pipeline(monkeypatch, role_profiles, [posting], screening_result)
 
@@ -96,10 +96,10 @@ async def test_apply_to_passing_postings_skips_rejected_and_applies_to_passing(m
 	rejected_posting = passing_posting.model_copy(update={'url': 'https://boards.greenhouse.io/acme/jobs/2'})
 
 	passing_result = RoleScreeningResult(
-		role='Backend Engineer', used_fallback=False, screening=ScreeningResult(match_score=90, reasoning='n/a', missing_keywords=[])
+		role='Backend Engineer', used_fallback=False, screening=ScreeningResult(match_score=90, reasoning='n/a')
 	)
 	rejected_result = RoleScreeningResult(
-		role='Backend Engineer', used_fallback=False, screening=ScreeningResult(match_score=40, reasoning='n/a', missing_keywords=[])
+		role='Backend Engineer', used_fallback=False, screening=ScreeningResult(match_score=40, reasoning='n/a')
 	)
 
 	applied_to = []
@@ -125,7 +125,7 @@ async def test_run_chains_screening_into_applying(monkeypatch):
 	role_profiles = _fixture_role_profiles()
 	posting = _fixture_posting()
 	screening_result = RoleScreeningResult(
-		role='Backend Engineer', used_fallback=False, screening=ScreeningResult(match_score=90, reasoning='n/a', missing_keywords=[])
+		role='Backend Engineer', used_fallback=False, screening=ScreeningResult(match_score=90, reasoning='n/a')
 	)
 
 	async def fake_screen_new_postings(llm):

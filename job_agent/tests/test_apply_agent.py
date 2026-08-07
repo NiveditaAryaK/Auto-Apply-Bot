@@ -42,7 +42,7 @@ async def test_apply_to_posting_records_applied_status_and_renders_a_resume(monk
 	async def fake_run_apply_agent(posting_arg, role_profile_arg, resume_path, llm):
 		assert posting_arg is posting
 		assert resume_path.exists()  # render_resume already ran before this is called
-		return ApplicationOutcome(submitted=True, confirmation_text='Application received.', questions_encountered=[])
+		return ApplicationOutcome(submitted=True, questions_encountered=[])
 
 	monkeypatch.setattr(apply_agent_module, '_run_apply_agent', fake_run_apply_agent)
 
@@ -77,7 +77,7 @@ async def test_apply_to_posting_records_failed_status_with_unanswered_questions_
 async def test_apply_to_posting_skips_the_browser_agent_when_domain_is_rate_limited(monkeypatch):
 	role_profile = _fixture_role_profile()
 	posting = _fixture_posting()
-	monkeypatch.setitem(config.RATE_LIMITS, 'boards.greenhouse.io', {'max_per_hour': 0, 'jitter_seconds': 0})
+	monkeypatch.setitem(config.RATE_LIMITS, 'boards.greenhouse.io', 0)
 
 	async def fail_if_called(*_args, **_kwargs):
 		raise AssertionError('should not run the browser-use agent when rate-limited')

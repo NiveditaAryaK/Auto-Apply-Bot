@@ -20,7 +20,6 @@ class ApplicationOutcome(BaseModel):
 	model_config = ConfigDict(extra='forbid')
 
 	submitted: bool
-	confirmation_text: str | None = None
 	questions_encountered: list[str]  # form questions the agent couldn't answer from the resume
 
 
@@ -60,11 +59,11 @@ async def _rate_limit_allows(url: str) -> bool:
 	the same domain and refuses once the configured cap is hit, so we don't hammer an ATS/job
 	board and get the account flagged."""
 	domain = urlparse(url).netloc
-	limits = config.RATE_LIMITS.get(domain, config.RATE_LIMITS['default'])
+	max_per_hour = config.RATE_LIMITS.get(domain, config.RATE_LIMITS['default'])
 	since = (datetime.now(timezone.utc) - timedelta(hours=1)).isoformat()
 	recent_urls = await db.get_recent_applied_urls(since)
 	applied_this_hour = sum(1 for recent_url in recent_urls if urlparse(recent_url).netloc == domain)
-	return applied_this_hour < limits['max_per_hour']
+	return applied_this_hour < max_per_hour
 
 
 async def _run_apply_agent(posting: JobPosting, role_profile: RoleProfile, resume_path: Path, llm: BaseChatModel) -> ApplicationOutcome:
@@ -88,7 +87,6 @@ async def apply_to_posting(posting: JobPosting, role_profile: RoleProfile, llm: 
 	(hr_agent.ScreeningResult.passes_screening); this function itself only enforces the
 	per-domain rate limit and records the outcome to db.applications."""
 	if not await _rate_limit_allows(posting.url):
-		outcome = ApplicationOutcome(submitted=False, confirmation_text='Rate limit reached for this domain.', questions_encountered=[])
 		await db.record_application(
 			dedup_key=posting.dedup_key,
 			company=posting.company,
@@ -97,7 +95,7 @@ async def apply_to_posting(posting: JobPosting, role_profile: RoleProfile, llm: 
 			ats_platform=posting.ats_platform,
 			status='rate_limited',
 		)
-		return outcome
+		return ApplicationOutcome(submitted=False, questions_encountered=[])
 
 	llm = llm or ChatOpenAI(model=config.LLM_MODEL, base_url=config.LLM_BASE_URL, api_key=config.LLM_API_KEY)
 
