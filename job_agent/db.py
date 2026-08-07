@@ -117,6 +117,18 @@ def _record_application_sync(
 		conn.close()
 
 
+def _get_application_sync(dedup_key: str) -> dict | None:
+	conn = _connect()
+	try:
+		conn.row_factory = sqlite3.Row
+		row = conn.execute(
+			'SELECT * FROM applications WHERE dedup_key = ? ORDER BY id DESC LIMIT 1', (dedup_key,)
+		).fetchone()
+		return dict(row) if row is not None else None
+	finally:
+		conn.close()
+
+
 def _get_cached_answer_sync(ats_platform: str, normalized_label: str) -> tuple[str, str] | None:
 	conn = _connect()
 	try:
@@ -146,6 +158,11 @@ def _cache_answer_sync(ats_platform: str, normalized_label: str, canonical_field
 
 async def is_seen(dedup_key: str) -> bool:
 	return await asyncio.to_thread(_is_seen_sync, dedup_key)
+
+
+async def get_application(dedup_key: str) -> dict | None:
+	"""Most recent applications row for this posting, or None if it's never been recorded."""
+	return await asyncio.to_thread(_get_application_sync, dedup_key)
 
 
 async def mark_seen(dedup_key: str, company: str, title: str, url: str, ats_platform: str) -> None:

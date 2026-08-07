@@ -1,12 +1,4 @@
-import pytest
-
-from job_agent import config, db
-
-
-@pytest.fixture(autouse=True)
-def isolated_db(tmp_path, monkeypatch):
-	monkeypatch.setattr(config, 'DATA_DIR', tmp_path)
-	monkeypatch.setattr(config, 'DB_PATH', tmp_path / 'job_agent.sqlite3')
+from job_agent import db
 
 
 async def test_mark_seen_and_is_seen_roundtrip():
@@ -33,6 +25,30 @@ async def test_record_application_does_not_raise():
 		match_score=90,
 		match_reasoning='strong match',
 	)
+
+
+async def test_get_application_returns_none_when_never_recorded():
+	assert await db.get_application('https://boards.greenhouse.io/co/jobs/does-not-exist') is None
+
+
+async def test_get_application_returns_most_recently_recorded_row():
+	dedup_key = 'https://boards.greenhouse.io/co/jobs/4'
+	await db.record_application(
+		dedup_key=dedup_key,
+		company='Co',
+		title='Engineer',
+		url=dedup_key,
+		ats_platform='greenhouse',
+		status='screened_pass',
+		match_score=85,
+		match_reasoning='Good fit.',
+	)
+
+	application = await db.get_application(dedup_key)
+
+	assert application is not None
+	assert application['status'] == 'screened_pass'
+	assert application['match_score'] == 85
 
 
 async def test_question_cache_miss_then_hit():
