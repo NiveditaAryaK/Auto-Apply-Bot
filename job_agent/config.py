@@ -10,6 +10,7 @@ JOB_AGENT_DIR = Path(__file__).resolve().parent
 DATA_DIR = JOB_AGENT_DIR / 'data'
 DB_PATH = DATA_DIR / 'job_agent.sqlite3'
 RESUME_OUTPUT_DIR = DATA_DIR / 'resumes'
+UPLOAD_DIR = DATA_DIR / 'uploads'
 
 # LM Studio local server (OpenAI-compatible endpoint). Set these in .env (see .env.example) --
 # model id must match what LM Studio reports at GET /v1/models exactly.
