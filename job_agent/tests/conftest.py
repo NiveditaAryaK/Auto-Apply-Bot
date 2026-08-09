@@ -10,3 +10,4 @@ def isolated_db(tmp_path, monkeypatch):
 	# RESUME_OUTPUT_DIR is derived from DATA_DIR at import time, not re-derived from it -- patch
 	# separately so tests that render resumes don't write real PDFs into the repo's data dir.
 	monkeypatch.setattr(config, 'RESUME_OUTPUT_DIR', tmp_path / 'resumes')
+	monkeypatch.setattr(config, 'UPLOAD_DIR', tmp_path / 'uploads')
