@@ -43,17 +43,36 @@ config.TARGET_COMPANIES --> Web Search Agent --> HR Agent --> Browser-Use apply 
 ## Setup
 
 1. `uv venv --python 3.11 && source .venv/bin/activate && uv sync`
-2. Populate `job_agent/config.py`:
-   - `ROLE_RESUMES` -- path to each resume PDF/DOCX, exactly one with `is_primary=True`.
+2. Copy `.env.example` to `.env` and set `JOB_AGENT_LLM_BASE_URL` / `JOB_AGENT_LLM_API_KEY` /
+   `JOB_AGENT_LLM_MODEL` -- defaults to a local LM Studio server; swap for any OpenAI-compatible
+   endpoint. `job_agent/config.py` reads these directly (no hardcoded fallback in source).
+3. Populate `job_agent/config.py`:
+   - `ROLE_RESUMES` -- path to each resume PDF/DOCX, exactly one with `is_primary=True`. Optional
+     if you're managing resumes through the web UI instead (see below) -- that stores them in the
+     `resumes` db table and builds this same list dynamically.
    - `TARGET_COMPANIES` -- Greenhouse board tokens / Lever company slugs to watch.
    - `KEYWORDS` -- case-insensitive substrings a posting's title/JD must contain.
    - `RATE_LIMITS` -- per-domain apply caps (defaults are conservative for LinkedIn/Indeed).
-   - `LLM_BASE_URL` / `LLM_MODEL` -- defaults to a local LM Studio server; swap for any
-     OpenAI-compatible endpoint.
-3. `uv run python -c "import asyncio; from job_agent.pipeline import run; asyncio.run(run())"`
+4. `uv run python -c "import asyncio; from job_agent.pipeline import run; asyncio.run(run())"`
 
 Data lives in `job_agent/data/` (sqlite tracker + rendered per-application resumes), created on
 first use.
+
+## Web UI
+
+A FastAPI backend (`job_agent/api/`) and a React/Vite frontend (`frontend/`) for uploading
+resumes and tracking applications without touching `config.py` or the sqlite db directly.
+
+```
+uv run uvicorn job_agent.api.service:app --reload   # backend on :8000
+cd frontend && npm install && npm run dev            # frontend on :5173 (proxies /api to :8000)
+```
+
+Open `http://localhost:5173`. The **Resumes** tab uploads/manages resumes (stored under
+`job_agent/data/uploads/`, tracked in the `resumes` db table -- the first upload is always
+primary, and `resume/roles.py`'s "exactly one primary" invariant is enforced on every write). The
+**Run Pipeline** button runs the full pipeline end-to-end and the **Dashboard** tab shows every
+screened/applied posting as it's recorded.
 
 ## Tests
 
@@ -70,3 +89,5 @@ personal application built on top of it.
 
 `job_agent/tests` never hits real job boards or a real browser -- discovery/LLM/browser-use calls
 are all injected via fakes at the function boundary (`adapters=`, `llm=`, `_run_apply_agent`).
+`job_agent/tests/api` covers the FastAPI routes and run orchestration the same way (`runner.pipeline.run`
+monkeypatched).
