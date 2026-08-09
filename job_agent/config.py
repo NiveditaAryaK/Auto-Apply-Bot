@@ -1,16 +1,21 @@
+import os
 from dataclasses import dataclass
 from pathlib import Path
+
+from dotenv import load_dotenv
+
+load_dotenv()
 
 JOB_AGENT_DIR = Path(__file__).resolve().parent
 DATA_DIR = JOB_AGENT_DIR / 'data'
 DB_PATH = DATA_DIR / 'job_agent.sqlite3'
 RESUME_OUTPUT_DIR = DATA_DIR / 'resumes'
 
-# LM Studio local server (OpenAI-compatible endpoint), model id must match what LM Studio reports
-# at GET /v1/models exactly (e.g. 'openai/gpt-oss-20b', not 'gpt-oss-20b').
-LLM_BASE_URL = 'http://localhost:1234/v1'
-LLM_API_KEY = 'lm-studio'
-LLM_MODEL = 'openai/gpt-oss-20b'
+# LM Studio local server (OpenAI-compatible endpoint). Set these in .env (see .env.example) --
+# model id must match what LM Studio reports at GET /v1/models exactly.
+LLM_BASE_URL = os.environ['JOB_AGENT_LLM_BASE_URL']
+LLM_API_KEY = os.environ['JOB_AGENT_LLM_API_KEY']
+LLM_MODEL = os.environ['JOB_AGENT_LLM_MODEL']
 
 MATCH_SCORE_THRESHOLD = 80
 
