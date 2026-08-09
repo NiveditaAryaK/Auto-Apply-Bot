@@ -30,6 +30,7 @@ job_agent/data/
 *.csv
 *.json
 !/server.json
+!frontend/**/*.json
 *.jsonl
 *.log
 *.bak

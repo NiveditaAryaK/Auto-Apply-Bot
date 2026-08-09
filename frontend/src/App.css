@@ -1,0 +1,197 @@
+.app {
+  text-align: left;
+  padding: 0 24px 48px;
+}
+
+.app-header {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 16px;
+}
+
+.app-header h1 {
+  font-size: 28px;
+  margin: 16px 0;
+}
+
+.app-header nav {
+  display: flex;
+  gap: 8px;
+}
+
+.app-header nav button {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 14px;
+  cursor: pointer;
+  color: var(--text);
+}
+
+.app-header nav button.active {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+  color: var(--text-h);
+}
+
+.run-control {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.run-control button {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 6px;
+  padding: 10px 18px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.run-control button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.run-summary {
+  font-size: 14px;
+  color: var(--text);
+}
+
+.page {
+  margin-top: 24px;
+}
+
+.error {
+  color: #dc2626;
+  font-size: 14px;
+}
+
+.empty {
+  color: var(--text);
+  font-style: italic;
+}
+
+/* Resumes page */
+
+.dropzone {
+  border: 2px dashed var(--border);
+  border-radius: 10px;
+  padding: 32px;
+  text-align: center;
+  margin-bottom: 16px;
+}
+
+.dropzone-active {
+  border-color: var(--accent-border);
+  background: var(--accent-bg);
+}
+
+.file-picker {
+  display: inline-block;
+  margin-top: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 14px;
+  cursor: pointer;
+}
+
+.resume-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.resume-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+
+.resume-row:last-child {
+  border-bottom: none;
+}
+
+.resume-name {
+  flex: 1;
+}
+
+.badge {
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.badge-primary {
+  background: var(--accent-bg);
+  color: var(--accent);
+  border: 1px solid var(--accent-border);
+}
+
+button.danger {
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 12px;
+  cursor: pointer;
+  color: #dc2626;
+}
+
+button.danger:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Dashboard page */
+
+.applications-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.applications-table th,
+.applications-table td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px;
+}
+
+.status {
+  display: inline-block;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+}
+
+.status-applied {
+  background: rgba(34, 197, 94, 0.15);
+  color: #16a34a;
+}
+
+.status-screened_pass {
+  background: var(--accent-bg);
+  color: var(--accent);
+}
+
+.status-screened_reject,
+.status-apply_failed {
+  background: rgba(220, 38, 38, 0.12);
+  color: #dc2626;
+}
+
+.status-rate_limited {
+  background: rgba(234, 179, 8, 0.15);
+  color: #b45309;
+}
