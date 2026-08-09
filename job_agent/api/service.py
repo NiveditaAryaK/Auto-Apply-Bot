@@ -21,6 +21,13 @@ app.add_middleware(
 _ALLOWED_RESUME_SUFFIXES = ('.pdf', '.docx')
 
 
+def _resume_out(row: dict) -> ResumeOut:
+	"""Builds the response DTO from explicit fields rather than ResumeOut.model_validate(row) --
+	the resumes table also carries stored_path (the server's absolute filesystem path), which
+	shouldn't be exposed to the client."""
+	return ResumeOut(id=row['id'], filename=row['filename'], is_primary=bool(row['is_primary']), uploaded_at=row['uploaded_at'])
+
+
 @app.post('/api/resumes', response_model=ResumeOut, status_code=201)
 async def upload_resume(file: UploadFile = File(...), is_primary: bool = Form(False)) -> ResumeOut:
 	original_name = file.filename or ''
@@ -33,12 +40,12 @@ async def upload_resume(file: UploadFile = File(...), is_primary: bool = Form(Fa
 	stored_path.write_bytes(await file.read())
 
 	resume_id = await db.insert_resume(filename=original_name, stored_path=str(stored_path), is_primary=is_primary)
-	return ResumeOut.model_validate(await db.get_resume(resume_id))
+	return _resume_out(await db.get_resume(resume_id))
 
 
 @app.get('/api/resumes', response_model=list[ResumeOut])
 async def list_resumes() -> list[ResumeOut]:
-	return [ResumeOut.model_validate(row) for row in await db.list_resumes()]
+	return [_resume_out(row) for row in await db.list_resumes()]
 
 
 @app.patch('/api/resumes/{resume_id}/primary', response_model=ResumeOut)
@@ -46,7 +53,7 @@ async def set_primary_resume(resume_id: int) -> ResumeOut:
 	if await db.get_resume(resume_id) is None:
 		raise HTTPException(404, 'Resume not found')
 	await db.set_primary_resume(resume_id)
-	return ResumeOut.model_validate(await db.get_resume(resume_id))
+	return _resume_out(await db.get_resume(resume_id))
 
 
 @app.delete('/api/resumes/{resume_id}', status_code=204)
