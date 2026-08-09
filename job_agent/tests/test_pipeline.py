@@ -1,6 +1,7 @@
+from pathlib import Path
 from types import SimpleNamespace
 
-from job_agent import db, pipeline
+from job_agent import config, db, pipeline
 from job_agent.apply_agent import ApplicationOutcome
 from job_agent.discovery.base import JobPosting
 from job_agent.hr_agent import RoleScreeningResult, ScreeningResult
@@ -90,6 +91,30 @@ async def test_screen_new_postings_returns_empty_list_when_no_new_postings(monke
 	assert results == []
 
 
+async def test_screen_new_postings_uses_injected_role_resumes_over_config(monkeypatch):
+	"""role_resumes lets a caller (e.g. the API layer, building the list from db.resumes) screen
+	against dynamically uploaded resumes instead of the static config.ROLE_RESUMES list."""
+	role_profiles = _fixture_role_profiles()
+	posting = _fixture_posting()
+	screening_result = RoleScreeningResult(
+		role='Backend Engineer', used_fallback=False, screening=ScreeningResult(match_score=90, reasoning='n/a')
+	)
+	_patch_pipeline(monkeypatch, role_profiles, [posting], screening_result)
+
+	seen_role_resumes = []
+
+	async def fake_load_role_profiles(role_resumes, llm=None):
+		seen_role_resumes.append(role_resumes)
+		return role_profiles
+
+	monkeypatch.setattr(pipeline, 'load_role_profiles', fake_load_role_profiles)
+
+	injected = [config.RoleResume(resume_path=Path('uploaded.pdf'), is_primary=True)]
+	await pipeline.screen_new_postings(llm=SimpleNamespace(), role_resumes=injected)
+
+	assert seen_role_resumes == [injected]
+
+
 async def test_apply_to_passing_postings_skips_rejected_and_applies_to_passing(monkeypatch):
 	role_profiles = _fixture_role_profiles()
 	passing_posting = _fixture_posting()
@@ -128,7 +153,7 @@ async def test_run_chains_screening_into_applying(monkeypatch):
 		role='Backend Engineer', used_fallback=False, screening=ScreeningResult(match_score=90, reasoning='n/a')
 	)
 
-	async def fake_screen_new_postings(llm):
+	async def fake_screen_new_postings(llm, role_resumes=None):
 		return role_profiles, [(posting, screening_result)]
 
 	async def fake_apply_to_passing_postings(profiles, screened, llm):
