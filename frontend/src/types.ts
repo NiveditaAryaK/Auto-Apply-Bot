@@ -25,6 +25,7 @@ export interface Run {
   started_at: string
   finished_at: string | null
   status: string
+  current_step: string | null
   postings_found: number | null
   screened_pass: number | null
   screened_reject: number | null

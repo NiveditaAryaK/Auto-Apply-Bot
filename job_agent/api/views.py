@@ -34,6 +34,7 @@ class RunOut(BaseModel):
 	started_at: str
 	finished_at: str | None
 	status: str
+	current_step: str | None
 	postings_found: int | None
 	screened_pass: int | None
 	screened_reject: int | None

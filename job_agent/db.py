@@ -44,6 +44,7 @@ CREATE TABLE IF NOT EXISTS runs (
 	started_at TEXT NOT NULL,
 	finished_at TEXT,
 	status TEXT NOT NULL,
+	current_step TEXT,
 	postings_found INTEGER,
 	screened_pass INTEGER,
 	screened_reject INTEGER,
@@ -66,7 +67,19 @@ def _connect() -> sqlite3.Connection:
 	conn = sqlite3.connect(config.DB_PATH, timeout=30)
 	_set_wal_mode(conn)
 	conn.executescript(_SCHEMA)
+	_migrate_schema(conn)
 	return conn
+
+
+def _migrate_schema(conn: sqlite3.Connection) -> None:
+	"""CREATE TABLE IF NOT EXISTS above only covers brand-new databases -- a runs table created
+	before current_step existed needs it added explicitly. Safe to attempt on every connect: the
+	failure mode (column already exists) is silently ignored."""
+	try:
+		conn.execute('ALTER TABLE runs ADD COLUMN current_step TEXT')
+		conn.commit()
+	except sqlite3.OperationalError:
+		pass
 
 
 def _set_wal_mode(conn: sqlite3.Connection) -> None:
@@ -275,6 +288,7 @@ def _update_run_sync(
 	run_id: int,
 	status: str | None = None,
 	finished_at: str | None = None,
+	current_step: str | None = None,
 	postings_found: int | None = None,
 	screened_pass: int | None = None,
 	screened_reject: int | None = None,
@@ -284,6 +298,7 @@ def _update_run_sync(
 	fields = {
 		'status': status,
 		'finished_at': finished_at,
+		'current_step': current_step,
 		'postings_found': postings_found,
 		'screened_pass': screened_pass,
 		'screened_reject': screened_reject,
@@ -328,6 +343,18 @@ def _get_active_run_sync() -> dict | None:
 		conn.row_factory = sqlite3.Row
 		row = conn.execute("SELECT * FROM runs WHERE status = 'running' ORDER BY id DESC LIMIT 1").fetchone()
 		return dict(row) if row is not None else None
+	finally:
+		conn.close()
+
+
+def _fail_stale_running_runs_sync(error: str) -> None:
+	conn = _connect()
+	try:
+		conn.execute(
+			"UPDATE runs SET status = 'failed', finished_at = ?, error = ? WHERE status = 'running'",
+			(_now(), error),
+		)
+		conn.commit()
 	finally:
 		conn.close()
 
@@ -422,6 +449,7 @@ async def update_run(
 	run_id: int,
 	status: str | None = None,
 	finished_at: str | None = None,
+	current_step: str | None = None,
 	postings_found: int | None = None,
 	screened_pass: int | None = None,
 	screened_reject: int | None = None,
@@ -433,6 +461,7 @@ async def update_run(
 		run_id,
 		status,
 		finished_at,
+		current_step,
 		postings_found,
 		screened_pass,
 		screened_reject,
@@ -453,3 +482,14 @@ async def get_active_run() -> dict | None:
 	"""The current in-flight run (status='running'), or None -- used to reject overlapping
 	POST /api/runs triggers rather than letting two browser-use Agent sessions race."""
 	return await asyncio.to_thread(_get_active_run_sync)
+
+
+async def fail_stale_running_runs(error: str = 'Interrupted by a server restart before the run finished.') -> None:
+	"""Sweeps every run stuck at status='running' to 'failed'. Call this once at API startup: a
+	'running' row can only be left over from a previous process (a crash, --reload restart, or
+	deploy killed its _execute_run background task without it ever reaching the try/except that
+	records completion or failure) -- a fresh process starts with no in-flight tasks of its own,
+	so any row it finds already 'running' is definitionally stale. Without this sweep such a row
+	blocks every future POST /api/runs forever (see create_run_if_none_active) with no recovery
+	path but manual DB surgery."""
+	await asyncio.to_thread(_fail_stale_running_runs_sync, error)

@@ -29,7 +29,7 @@ async def test_start_run_raises_when_a_run_is_already_active():
 
 
 async def test_start_run_records_applied_count_from_pipeline_outcomes(monkeypatch):
-	async def fake_pipeline_run(llm=None, role_resumes=None):
+	async def fake_pipeline_run(llm=None, role_resumes=None, on_progress=None):
 		return [
 			ApplicationOutcome(submitted=True, questions_encountered=[]),
 			ApplicationOutcome(submitted=False, questions_encountered=['salary?']),
@@ -45,7 +45,7 @@ async def test_start_run_records_applied_count_from_pipeline_outcomes(monkeypatc
 
 
 async def test_start_run_records_screening_counts_from_applications_written_this_run(monkeypatch):
-	async def fake_pipeline_run(llm=None, role_resumes=None):
+	async def fake_pipeline_run(llm=None, role_resumes=None, on_progress=None):
 		await db.record_application(
 			dedup_key='https://boards.greenhouse.io/co/jobs/pass',
 			company='Co',
@@ -79,7 +79,7 @@ async def test_start_run_records_screening_counts_from_applications_written_this
 
 
 async def test_start_run_records_error_on_failure(monkeypatch):
-	async def fake_pipeline_run(llm=None, role_resumes=None):
+	async def fake_pipeline_run(llm=None, role_resumes=None, on_progress=None):
 		raise ValueError('exactly one primary resume required')
 
 	monkeypatch.setattr(runner.pipeline, 'run', fake_pipeline_run)
@@ -99,7 +99,7 @@ async def test_concurrent_start_run_calls_only_let_one_through(monkeypatch):
 	before all 20 concurrent calls have been attempted."""
 	release = asyncio.Event()
 
-	async def fake_pipeline_run(llm=None, role_resumes=None):
+	async def fake_pipeline_run(llm=None, role_resumes=None, on_progress=None):
 		await release.wait()
 		return []
 
@@ -116,12 +116,29 @@ async def test_concurrent_start_run_calls_only_let_one_through(monkeypatch):
 	await _wait_until_finished(succeeded[0])
 
 
+async def test_start_run_publishes_pipeline_progress_onto_the_run_row(monkeypatch):
+	seen_current_step_while_running = None
+
+	async def fake_pipeline_run(llm=None, role_resumes=None, on_progress=None):
+		nonlocal seen_current_step_while_running
+		await on_progress('Searching job boards for new postings...')
+		seen_current_step_while_running = (await db.get_run(run_id))['current_step']
+		return []
+
+	monkeypatch.setattr(runner.pipeline, 'run', fake_pipeline_run)
+
+	run_id = await runner.start_run()
+	await _wait_until_finished(run_id)
+
+	assert seen_current_step_while_running == 'Searching job boards for new postings...'
+
+
 async def test_start_run_builds_role_resumes_from_uploaded_resumes(monkeypatch):
 	await db.insert_resume('resume.pdf', '/data/resume.pdf', is_primary=True)
 
 	seen_role_resumes = []
 
-	async def fake_pipeline_run(llm=None, role_resumes=None):
+	async def fake_pipeline_run(llm=None, role_resumes=None, on_progress=None):
 		seen_role_resumes.append(role_resumes)
 		return []
 

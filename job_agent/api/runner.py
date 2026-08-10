@@ -35,8 +35,12 @@ async def _execute_run(run_id: int, role_resumes: list[config.RoleResume]) -> No
 	since only one run executes at a time (guarded by db.get_active_run() in start_run) so every
 	row written after that timestamp unambiguously belongs to this run."""
 	started_at = datetime.now(timezone.utc).isoformat()
+
+	async def on_progress(message: str) -> None:
+		await db.update_run(run_id, current_step=message)
+
 	try:
-		outcomes = await pipeline.run(role_resumes=role_resumes)
+		outcomes = await pipeline.run(role_resumes=role_resumes, on_progress=on_progress)
 
 		this_run_rows = [a for a in await db.list_applications() if a['applied_at'] >= started_at]
 		screening_rows = [a for a in this_run_rows if a['status'] in ('screened_pass', 'screened_reject')]

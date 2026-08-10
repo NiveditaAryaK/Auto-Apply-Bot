@@ -70,9 +70,13 @@ cd frontend && npm install && npm run dev            # frontend on :5173 (proxie
 
 Open `http://localhost:5173`. The **Resumes** tab uploads/manages resumes (stored under
 `job_agent/data/uploads/`, tracked in the `resumes` db table -- the first upload is always
-primary, and `resume/roles.py`'s "exactly one primary" invariant is enforced on every write). The
-**Run Pipeline** button runs the full pipeline end-to-end and the **Dashboard** tab shows every
-screened/applied posting as it's recorded.
+primary, and `resume/roles.py`'s "exactly one primary" invariant is enforced on every write) --
+dropping a resume there also starts a pipeline run automatically (skipped if one's already in
+flight, since the running one already has the resume list it started with). The **Run Pipeline**
+button in the header does the same on demand. While a run is active its live status (discovery /
+screening / applying, with counts) is polled onto the button; the **Dashboard** tab shows every
+screened/applied posting as it's recorded. If the backend process dies or reloads mid-run, the
+run is left `failed` (rather than stuck `running` forever) the next time the API starts up.
 
 ## Tests
 

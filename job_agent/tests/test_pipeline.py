@@ -115,6 +115,26 @@ async def test_screen_new_postings_uses_injected_role_resumes_over_config(monkey
 	assert seen_role_resumes == [injected]
 
 
+async def test_screen_new_postings_reports_progress(monkeypatch):
+	role_profiles = _fixture_role_profiles()
+	posting = _fixture_posting()
+	screening_result = RoleScreeningResult(
+		role='Backend Engineer', used_fallback=False, screening=ScreeningResult(match_score=90, reasoning='n/a')
+	)
+	_patch_pipeline(monkeypatch, role_profiles, [posting], screening_result)
+
+	messages = []
+
+	async def on_progress(message):
+		messages.append(message)
+
+	await pipeline.screen_new_postings(llm=SimpleNamespace(), on_progress=on_progress)
+
+	assert any('Searching job boards' in m for m in messages)
+	assert any('Found 1 new posting' in m for m in messages)
+	assert any('Screening 1/1' in m and posting.title in m and posting.company in m for m in messages)
+
+
 async def test_apply_to_passing_postings_skips_rejected_and_applies_to_passing(monkeypatch):
 	role_profiles = _fixture_role_profiles()
 	passing_posting = _fixture_posting()
@@ -146,6 +166,30 @@ async def test_apply_to_passing_postings_skips_rejected_and_applies_to_passing(m
 	assert outcomes[0].submitted is True
 
 
+async def test_apply_to_passing_postings_reports_progress(monkeypatch):
+	role_profiles = _fixture_role_profiles()
+	posting = _fixture_posting()
+	passing_result = RoleScreeningResult(
+		role='Backend Engineer', used_fallback=False, screening=ScreeningResult(match_score=90, reasoning='n/a')
+	)
+
+	async def fake_apply_to_posting(posting, role_profile, llm):
+		return ApplicationOutcome(submitted=True, questions_encountered=[])
+
+	monkeypatch.setattr(pipeline, 'apply_to_posting', fake_apply_to_posting)
+
+	messages = []
+
+	async def on_progress(message):
+		messages.append(message)
+
+	await pipeline.apply_to_passing_postings(
+		role_profiles, [(posting, passing_result)], llm=SimpleNamespace(), on_progress=on_progress
+	)
+
+	assert any('Applying 1/1' in m and posting.title in m and posting.company in m for m in messages)
+
+
 async def test_run_chains_screening_into_applying(monkeypatch):
 	role_profiles = _fixture_role_profiles()
 	posting = _fixture_posting()
@@ -153,10 +197,10 @@ async def test_run_chains_screening_into_applying(monkeypatch):
 		role='Backend Engineer', used_fallback=False, screening=ScreeningResult(match_score=90, reasoning='n/a')
 	)
 
-	async def fake_screen_new_postings(llm, role_resumes=None):
+	async def fake_screen_new_postings(llm, role_resumes=None, on_progress=None):
 		return role_profiles, [(posting, screening_result)]
 
-	async def fake_apply_to_passing_postings(profiles, screened, llm):
+	async def fake_apply_to_passing_postings(profiles, screened, llm, on_progress=None):
 		assert profiles == role_profiles
 		assert screened == [(posting, screening_result)]
 		return [ApplicationOutcome(submitted=True, questions_encountered=[])]

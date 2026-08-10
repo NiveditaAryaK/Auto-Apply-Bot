@@ -181,6 +181,46 @@ async def test_create_run_if_none_active_is_atomic_under_concurrency():
 	assert sum(1 for r in runs if r['status'] == 'running') == 1
 
 
+async def test_update_run_sets_current_step():
+	run_id = await db.create_run()
+
+	await db.update_run(run_id, current_step='Screening 2/5: Backend Engineer at Acme')
+
+	run = await db.get_run(run_id)
+	assert run is not None
+	assert run['current_step'] == 'Screening 2/5: Backend Engineer at Acme'
+	assert run['status'] == 'running'  # unaffected by an update that only sets current_step
+
+
+async def test_fail_stale_running_runs_sweeps_running_rows_to_failed():
+	"""Regression test for a run whose background task died with a previous process (a crash,
+	--reload restart, or deploy) -- the row is left stuck at status='running' forever with no
+	live task to ever finish it, which would otherwise block every future run via
+	create_run_if_none_active. This is meant to run once at API startup."""
+	stale_id = await db.create_run()
+	await db.update_run(stale_id, current_step='Screening 2/5: Backend Engineer at Acme')
+
+	await db.fail_stale_running_runs()
+
+	run = await db.get_run(stale_id)
+	assert run is not None
+	assert run['status'] == 'failed'
+	assert run['finished_at'] is not None
+	assert run['error']
+	assert await db.get_active_run() is None
+
+
+async def test_fail_stale_running_runs_leaves_completed_runs_alone():
+	run_id = await db.create_run()
+	await db.update_run(run_id, status='completed', finished_at='2026-01-01T00:00:00+00:00', postings_found=1)
+
+	await db.fail_stale_running_runs()
+
+	run = await db.get_run(run_id)
+	assert run is not None
+	assert run['status'] == 'completed'
+
+
 async def test_update_run_completes_it_and_clears_active_run():
 	run_id = await db.create_run()
 

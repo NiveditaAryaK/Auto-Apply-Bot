@@ -16,6 +16,7 @@ export function RunControl({
       <button onClick={onStart} disabled={running}>
         {running ? 'Running…' : 'Run Pipeline'}
       </button>
+      {running && run?.current_step && <span className="run-progress">{run.current_step}</span>}
       {error && <span className="error">{error}</span>}
       {run?.status === 'completed' && (
         <span className="run-summary">

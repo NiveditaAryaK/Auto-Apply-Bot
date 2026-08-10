@@ -64,6 +64,12 @@
   color: var(--text);
 }
 
+.run-progress {
+  font-size: 14px;
+  color: var(--text);
+  font-style: italic;
+}
+
 .page {
   margin-top: 24px;
 }

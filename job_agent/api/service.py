@@ -1,3 +1,4 @@
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
@@ -8,7 +9,17 @@ from job_agent import config, db
 from job_agent.api import runner
 from job_agent.api.views import ApplicationOut, ResumeOut, RunOut
 
-app = FastAPI(title='job_agent')
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+	# A process only just starting up can't have any run's background task actually in flight, so
+	# a 'running' row found here is necessarily stale (left behind by a crash, --reload restart,
+	# or deploy) -- see db.fail_stale_running_runs.
+	await db.fail_stale_running_runs()
+	yield
+
+
+app = FastAPI(title='job_agent', lifespan=_lifespan)
 
 # Vite dev server default ports -- this is a single-user local tool, not a public deployment.
 app.add_middleware(
