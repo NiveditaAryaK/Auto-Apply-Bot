@@ -2,7 +2,13 @@ import { useCallback, useEffect, useState, type DragEvent } from 'react'
 import { api } from '../api'
 import type { Resume } from '../types'
 
-export function ResumesPage() {
+export function ResumesPage({
+  runInProgress,
+  onResumeUploaded,
+}: {
+  runInProgress: boolean
+  onResumeUploaded: () => Promise<void>
+}) {
   const [resumes, setResumes] = useState<Resume[]>([])
   const [error, setError] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -26,6 +32,10 @@ export function ResumesPage() {
     try {
       await api.uploadResume(file, false)
       await refresh()
+      // A run already in flight will pick up this resume on its own -- only kick off a fresh
+      // one when the pipeline is idle, so dropping a file mid-run doesn't just surface a
+      // redundant "already in progress" error where the running state already says as much.
+      if (!runInProgress) await onResumeUploaded()
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -73,7 +83,13 @@ export function ResumesPage() {
         onDragLeave={() => setDragOver(false)}
         onDrop={onDrop}
       >
-        <p>{uploading ? 'Uploading…' : 'Drag & drop a resume (.pdf or .docx), or'}</p>
+        <p>
+          {uploading
+            ? 'Uploading…'
+            : runInProgress
+              ? 'Drag & drop a resume (.pdf or .docx) -- it will be used on the next run, or'
+              : 'Drag & drop a resume (.pdf or .docx) to upload and start the pipeline, or'}
+        </p>
         <label className="file-picker">
           Browse files
           <input
