@@ -13,12 +13,17 @@ async def start_run() -> int:
 	"""Kick off a full pipeline run (discovery -> screening -> apply) as a background task and
 	return the new runs.id immediately, so the caller (the API layer) can return without waiting
 	for a potentially long-running browser-use apply step. Raises RuntimeError if a run is
-	already in flight -- the API layer translates that into a 409."""
-	if await db.get_active_run() is not None:
+	already in flight -- the API layer translates that into a 409.
+
+	Uses db.create_run_if_none_active() rather than a get_active_run() check followed by a
+	separate create_run() insert: two concurrent calls (e.g. a double-clicked Run button) could
+	otherwise both observe "no active run" before either insert commits and both launch a
+	pipeline run."""
+	run_id = await db.create_run_if_none_active()
+	if run_id is None:
 		raise RuntimeError('A run is already in progress')
 
 	role_resumes = _role_resumes_from_rows(await db.list_resumes())
-	run_id = await db.create_run()
 	asyncio.create_task(_execute_run(run_id, role_resumes))
 	return run_id
 

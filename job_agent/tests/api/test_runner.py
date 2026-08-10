@@ -91,6 +91,31 @@ async def test_start_run_records_error_on_failure(monkeypatch):
 	assert 'exactly one primary' in run['error']
 
 
+async def test_concurrent_start_run_calls_only_let_one_through(monkeypatch):
+	"""Regression test for the check-then-act race between db.get_active_run() and
+	db.create_run(): firing many concurrent start_run() calls must only ever let exactly one
+	succeed, with the rest raising RuntimeError, never two runs launched at once. The fake
+	pipeline blocks on an Event so the winning run can't finish (and free up the active-run slot)
+	before all 20 concurrent calls have been attempted."""
+	release = asyncio.Event()
+
+	async def fake_pipeline_run(llm=None, role_resumes=None):
+		await release.wait()
+		return []
+
+	monkeypatch.setattr(runner.pipeline, 'run', fake_pipeline_run)
+
+	results = await asyncio.gather(*(runner.start_run() for _ in range(20)), return_exceptions=True)
+
+	succeeded = [r for r in results if isinstance(r, int)]
+	failed = [r for r in results if isinstance(r, RuntimeError)]
+	assert len(succeeded) == 1
+	assert len(failed) == 19
+
+	release.set()
+	await _wait_until_finished(succeeded[0])
+
+
 async def test_start_run_builds_role_resumes_from_uploaded_resumes(monkeypatch):
 	await db.insert_resume('resume.pdf', '/data/resume.pdf', is_primary=True)
 

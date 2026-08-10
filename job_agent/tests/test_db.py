@@ -1,3 +1,5 @@
+import asyncio
+
 from job_agent import db
 
 
@@ -96,6 +98,17 @@ async def test_inserting_a_second_resume_as_primary_unmarks_the_first():
 	assert second is not None and second['is_primary'] == 1
 
 
+async def test_concurrent_first_uploads_still_leave_exactly_one_primary():
+	"""Regression test for the check-then-act race in _insert_resume_sync: firing many concurrent
+	insert_resume() calls against an empty table must still leave exactly one row marked
+	primary, never zero (nobody claims it) and never more than one (multiple see count == 0)."""
+	await asyncio.gather(*(db.insert_resume(f'resume{i}.pdf', f'/data/resume{i}.pdf') for i in range(20)))
+
+	resumes = await db.list_resumes()
+	assert len(resumes) == 20
+	assert sum(1 for r in resumes if r['is_primary']) == 1
+
+
 async def test_set_primary_resume_swaps_the_flag():
 	first_id = await db.insert_resume('resume1.pdf', '/data/resume1.pdf')
 	second_id = await db.insert_resume('resume2.pdf', '/data/resume2.pdf')
@@ -137,6 +150,35 @@ async def test_create_run_marks_it_active_until_updated():
 	assert active is not None
 	assert active['id'] == run_id
 	assert active['status'] == 'running'
+
+
+async def test_create_run_if_none_active_succeeds_when_none_running():
+	run_id = await db.create_run_if_none_active()
+
+	assert run_id is not None
+	active = await db.get_active_run()
+	assert active is not None and active['id'] == run_id
+
+
+async def test_create_run_if_none_active_returns_none_when_one_is_running():
+	first_id = await db.create_run_if_none_active()
+
+	second_id = await db.create_run_if_none_active()
+
+	assert first_id is not None
+	assert second_id is None
+
+
+async def test_create_run_if_none_active_is_atomic_under_concurrency():
+	"""Regression test for the check-then-act race: firing many concurrent calls must only ever
+	let exactly one of them win, never zero and never more than one."""
+	results = await asyncio.gather(*(db.create_run_if_none_active() for _ in range(20)))
+
+	winners = [r for r in results if r is not None]
+	assert len(winners) == 1
+
+	runs = await db.list_runs()
+	assert sum(1 for r in runs if r['status'] == 'running') == 1
 
 
 async def test_update_run_completes_it_and_clears_active_run():

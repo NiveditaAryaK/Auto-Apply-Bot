@@ -1,5 +1,6 @@
 import asyncio
 import sqlite3
+import time
 from datetime import datetime, timezone
 
 from job_agent import config
@@ -58,10 +59,30 @@ def _now() -> str:
 
 def _connect() -> sqlite3.Connection:
 	config.DATA_DIR.mkdir(parents=True, exist_ok=True)
-	conn = sqlite3.connect(config.DB_PATH)
-	conn.execute('PRAGMA journal_mode=WAL')
+	# timeout=30 (vs. the 3-second default) governs how long sqlite3 retries against
+	# SQLITE_BUSY before raising "database is locked" -- each API request opens its own
+	# connection (see the _*_sync functions below), so concurrent requests routinely contend
+	# for the single writer lock and need real headroom to wait rather than fail outright.
+	conn = sqlite3.connect(config.DB_PATH, timeout=30)
+	_set_wal_mode(conn)
 	conn.executescript(_SCHEMA)
 	return conn
+
+
+def _set_wal_mode(conn: sqlite3.Connection) -> None:
+	"""Switching into WAL mode takes a brief exclusive lock (a one-time change persisted in the
+	database file itself), and unlike ordinary statements this specific pragma raises "database is
+	locked" immediately rather than honoring sqlite3.connect(timeout=...) -- so under a burst of
+	concurrent first-ever connections to a fresh database we retry it ourselves. Once any
+	connection succeeds, the mode is already WAL for every later connection and this is a no-op."""
+	for attempt in range(10):
+		try:
+			conn.execute('PRAGMA journal_mode=WAL')
+			return
+		except sqlite3.OperationalError:
+			if attempt == 9:
+				raise
+			time.sleep(0.05 * (attempt + 1))
 
 
 def _is_seen_sync(dedup_key: str) -> bool:
@@ -160,6 +181,12 @@ def _list_applications_sync() -> list[dict]:
 def _insert_resume_sync(filename: str, stored_path: str, is_primary: bool = False) -> int:
 	conn = _connect()
 	try:
+		# BEGIN IMMEDIATE grabs the write lock upfront, before the SELECT -- without it, two
+		# concurrent inserts could both read count == 0 (or both read is_primary=True and see no
+		# existing primary to unmark) before either commits, and both end up marking themselves
+		# primary. A plain conn.execute() only opens sqlite3's implicit transaction lazily, at the
+		# first DML statement, which is too late to close that window.
+		conn.execute('BEGIN IMMEDIATE')
 		count = conn.execute('SELECT COUNT(*) FROM resumes').fetchone()[0]
 		is_primary = is_primary or count == 0  # first resume uploaded is always primary
 		if is_primary:
@@ -222,6 +249,24 @@ def _create_run_sync() -> int:
 		)
 		conn.commit()
 		return cursor.lastrowid
+	finally:
+		conn.close()
+
+
+def _create_run_if_none_active_sync() -> int | None:
+	"""Atomically inserts a new 'running' row unless one already exists, in a single statement --
+	SQLite serializes writers against the same database file, so unlike a separate
+	get_active_run() SELECT followed by an INSERT, two concurrent callers can't both observe "no
+	active run" and both proceed. Returns the new run's id, or None if a run was already active."""
+	conn = _connect()
+	try:
+		cursor = conn.execute(
+			"INSERT INTO runs (started_at, status) "
+			"SELECT ?, 'running' WHERE NOT EXISTS (SELECT 1 FROM runs WHERE status = 'running')",
+			(_now(),),
+		)
+		conn.commit()
+		return cursor.lastrowid if cursor.rowcount > 0 else None
 	finally:
 		conn.close()
 
@@ -364,6 +409,13 @@ async def delete_resume(resume_id: int) -> None:
 async def create_run() -> int:
 	"""Insert a new runs row with status='running' and return its id."""
 	return await asyncio.to_thread(_create_run_sync)
+
+
+async def create_run_if_none_active() -> int | None:
+	"""Atomically create a new 'running' row unless one is already active. Returns the new run's
+	id, or None if a run was already in progress -- use this instead of get_active_run() followed
+	by create_run() to avoid a check-then-act race between concurrent callers."""
+	return await asyncio.to_thread(_create_run_if_none_active_sync)
 
 
 async def update_run(
